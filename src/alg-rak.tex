@@ -1,0 +1,40 @@
+\begin{algorithm}[hbtp]
+\caption{GVE-LPA: Our parallel Label Propagation Algorithm (LPA).}
+\label{alg:rak}
+\begin{algorithmic}[1]
+\Require{$G'$: Input graph}
+\Require{$C$: Community membership of each vertex}
+\Require{$G'$: Input/super-vertex graph}
+\Require{$C'$: Community membership of each vertex in $G'$}
+\Require{$K'$: Total edge weight of each vertex}
+\Require{$\Sigma'$: Total edge weight of each community}
+\Ensure{$G'_{C'}$: Community vertices (CSR)}
+\Ensure{$H_t$: Collision-free per-thread hashtable}
+\Ensure{$l_i$: Number of iterations performed (per pass)}
+\Ensure{$l_p$: Number of passes performed}
+\Ensure{$\tau$: Per iteration tolerance}
+\Ensure{$\tau_{agg}$: Aggregation tolerance}
+
+\Statex
+
+\Function{louvain}{$G$} \label{alg:louvain--begin}
+  \State Vertex membership: $C \gets [0 .. |V|)$ \textbf{;} $G' \gets G$ \label{alg:louvain--initialization}
+  \ForAll{$l_p \in [0 .. \text{\small{MAX\_PASSES}})$} \label{alg:louvain--passes-begin}
+    \State $\Sigma' \gets K' \gets vertexWeights(G')$ \textbf{;} $C' \gets [0 .. |V'|)$ \label{alg:louvain--reset-weights}
+    \State Mark all vertices in $G'$ as unprocessed \label{alg:louvain--reset-affected}
+    \State $l_i \gets louvainMove(G', C', K', \Sigma')$ \label{alg:louvain--local-move}
+    \If{$l_i \le 1$} \textbf{break} \Comment{Globally converged?} \label{alg:louvain--globally-converged}
+    \EndIf
+    \State $|\Gamma|, |\Gamma_{old}| \gets$ Number of communities in $C$, $C'$
+    \If{$|\Gamma|/|\Gamma_{old}| > \tau_{agg}$} \textbf{break} \Comment{Low shrink?} \label{alg:louvain--aggregation-tolerance}
+    \EndIf
+    \State $C' \gets$ Renumber communities in $C'$ \label{alg:louvain--renumber}
+    \State $C \gets$ Lookup dendrogram using $C$ to $C'$ \label{alg:louvain--lookup}
+    \State $G' \gets louvainAggregate(G', C')$ \label{alg:louvain--aggregate}
+    \State $\tau \gets \tau / \text{\small{TOLERANCE\_DROP}}$ \Comment{Threshold scaling} \label{alg:louvain--threshold-scaling}
+  \EndFor \label{alg:louvain--passes-end}
+  \State $C \gets$ Lookup dendrogram using $C$ to $C'$ \label{alg:louvain--lookup-last}
+  \Return{$C$} \label{alg:louvain--return}
+\EndFunction \label{alg:louvain--end}
+\end{algorithmic}
+\end{algorithm}

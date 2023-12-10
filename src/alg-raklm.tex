@@ -1,0 +1,47 @@
+\begin{algorithm}[hbtp]
+\caption{Local-moving phase of GVE-Louvain.}
+\label{alg:louvainlm}
+\begin{algorithmic}[1]
+\Require{$G'$: Input/super-vertex graph}
+\Require{$C'$: Community membership of each vertex}
+\Require{$K'$: Total edge weight of each vertex}
+\Require{$\Sigma'$: Total edge weight of each community}
+\Ensure{$G'_{C'}$: Community vertices (CSR)}
+\Ensure{$H_t$: Collision-free per-thread hashtable}
+\Ensure{$l_i$: Number of iterations performed}
+\Ensure{$\tau$: Per iteration tolerance}
+
+\Statex
+
+\Function{louvainMove}{$G', C', K', \Sigma'$} \label{alg:louvainlm--move-begin}
+  \ForAll{$l_i \in [0 .. \text{\small{MAX\_ITERATIONS}})$} \label{alg:louvainlm--iterations-begin}
+    \State Total delta-modularity per iteration: $\Delta Q \gets 0$ \label{alg:louvainlm--init-deltaq}
+    \ForAll{unprocessed $i \in V'$ \textbf{in parallel}} \label{alg:louvainlm--loop-vertices-begin}
+      \State Mark $i$ as processed (prune) \label{alg:louvainlm--prune}
+      \State $H_t \gets scanCommunities(\{\}, G', C', i, false)$ \label{alg:louvainlm--scan}
+      \State $\rhd$ Use $H_t, K', \Sigma'$ to choose best community
+      \State $c^* \gets$ Best community linked to $i$ in $G'$ \label{alg:louvainlm--best-community-begin}
+      \State $\delta Q^* \gets$ Delta-modularity of moving $i$ to $c^*$ \label{alg:louvainlm--best-community-end}
+      \If{$c^* = C'[i]$} \textbf{continue} \label{alg:louvainlm--best-community-same}
+      \EndIf
+      \State $\Sigma'[C'[i]] -= K'[i]$ \textbf{;} $\Sigma'[c^*] += K'[i]$ \textbf{atomic} \label{alg:louvainlm--perform-move-begin}
+      \State $C'[i] \gets c^*$ \textbf{;} $\Delta Q \gets \Delta Q + \delta Q^*$ \label{alg:louvainlm--perform-move-end}
+      \State Mark neighbors of $i$ as unprocessed \label{alg:louvainlm--remark}
+    \EndFor \label{alg:louvainlm--loop-vertices-end}
+    \If{$\Delta Q \le \tau$} \textbf{break} \Comment{Locally converged?} \label{alg:louvainlm--locally-converged}
+    \EndIf
+  \EndFor \label{alg:louvainlm--iterations-end}
+  \Return{$l_i$} \label{alg:louvainlm--return}
+\EndFunction \label{alg:louvainlm--move-end}
+
+\Statex
+
+\Function{scanCommunities}{$H_t, G', C', i, self$}
+  \ForAll{$(j, w) \in G'.edges(i)$}
+    \If{$self$ \textbf{or} $i \neq j$} $H_t \gets H_t[C'[j]] + w$
+    \EndIf
+  \EndFor
+  \Return{$H_t$}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}

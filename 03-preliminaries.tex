@@ -1,0 +1,41 @@
+Consider an undirected graph $G(V, E, w)$, where $V$ is the set of vertices, $E$ is the set of edges, and $w_{ij} = w_{ji}$ represents the weight associated with each edge. For unweighted graphs, we assume a unit weight for each edge, i.e., $w_{ij} = 1$. The neighbors of a vertex $i$ are denoted as $J_i = {j\ |\ (i, j) \in E}$, the weighted degree of each vertex as $K_i = \sum_{j \in J_i} w_{ij}$, the total number of vertices as $N = |V|$, the total number of edges as $M = |E|$, and the sum of edge weights in the undirected graph as $m = \sum_{i, j \in V} w_{ij}/2$.
+
+
+
+
+\subsection{Community detection}
+
+Disjoint community detection involves the identification of a community membership mapping, $C: V \rightarrow \Gamma$, where each vertex $i \in V$ is assigned a community ID $c \in \Gamma$, with $\Gamma$ representing the set of community IDs. We denote the vertices belonging to a community $c \in \Gamma$ as $V_c$, and the community to which a vertex $i$ belongs as $C_i$. Additionally, we denote the neighbors of vertex $i$ within community $c$ as $J_{i \rightarrow c} = {j\ |\ j \in J_i\ and\ C_j = c}$, the sum of edge weights for those neighbors as $K_{i \rightarrow c} = \sum_{j \in J_{i \rightarrow c}} w_{ij}$, the edge weight within a community $c$ as $\sigma_c = \sum_{(i, j) \in E\ and\ C_i = C_j = c} w_{ij}$, and the total edge weight of a community $c$ as $\Sigma_c = \sum_{(i, j) \in E\ and\ C_i = c} w_{ij}$ \cite{com-leskovec21}.
+
+
+
+
+\subsection{Modularity}
+
+Modularity functions as a metric for evaluating the quality of communities identified by heuristic-based community detection algorithms. It is calculated as the difference between the fraction of edges within communities and the expected fraction under random edge distribution. It lies in a range of $[-0.5, 1]$, where higher values signify superior quality \cite{com-brandes07}.\ignore{The optimization of this metric theoretically leads to the optimal grouping \cite{com-newman04, com-traag11}.} The modularity $Q$ for the identified communities is computed using Equation \ref{eq:modularity}, where $\delta$ denotes the Kronecker delta function ($\delta (x,y)=1$ if $x=y$, $0$ otherwise).\ignore{The \textit{delta modularity} of moving a vertex $i$ from community $d$ to community $c$, denoted as $\Delta Q_{i: d \rightarrow c}$, can be computed using Equation \ref{eq:delta-modularity}.}
+
+\begin{equation}
+\label{eq:modularity}
+  Q
+  = \frac{1}{2m} \sum_{(i, j) \in E} \left[w_{ij} - \frac{K_i K_j}{2m}\right] \delta(C_i, C_j)
+  = \sum_{c \in \Gamma} \left[\frac{\sigma_c}{2m} - \left(\frac{\Sigma_c}{2m}\right)^2\right]
+\end{equation}
+
+\ignore{\begin{equation}
+\label{eq:delta-modularity}
+  \Delta Q_{i: d \rightarrow c}
+  = \frac{1}{m} (K_{i \rightarrow c} - K_{i \rightarrow d}) - \frac{K_i}{2m^2} (K_i + \Sigma_c - \Sigma_d)
+\end{equation}}
+
+
+
+
+\subsection{Label Progagation Algorithm (LPA)}
+\label{sec:about-rak}
+
+LPA \cite{com-raghavan07} is a popular diffusion-based method for identifying communities of medium quality in large networks. It is simpler, faster, and more scalable compared to the Louvain method \cite{com-blondel08}. In LPA, each vertex $i$ is starts with a unique label (community id) $C_i$. During each iteration, vertices adopt the label with the highest interconnecting weight, as shown in Equation \ref{eq:lpa}. Through this iterative process, a consensus among densely connected groups of vertices is achieved, forming communities. The algorithm converges when at least $1-\tau$ fraction of vertices (where $\tau$ is the tolerance parameter) maintain their community membership. LPA exhibits a time complexity of $O(L |E|)$ and a space complexity of $O(|V| + |E|)$, with $L$ denoting the number of iterations performed \cite{com-raghavan07}. We have experimented with COPRA \cite{com-gregory10}, SLPA \cite{com-xie11}, and LabelRank \cite{com-xie13}, but found LPA to be the most performant, while yielding communities of equivalent quality \cite{sahu2023selecting}.
+
+\begin{equation}
+\label{eq:lpa}
+  C_i =\ \underset{c\ \in \ \Gamma}{\arg\max} { \sum_{j \in J_i\ |\ C_j = c} w_{ij} }
+\end{equation}

@@ -1,0 +1,39 @@
+\begin{algorithm}[hbtp]
+\caption{Aggregation phase of GVE-Louvain.}
+\label{alg:louvainag}
+\begin{algorithmic}[1]
+\Require{$G'$: Input/super-vertex graph}
+\Require{$C'$: Community membership of each vertex}
+\Ensure{$G'_{C'}$: Community vertices (CSR)}
+\Ensure{$G''$: Super-vertex graph (weighted CSR)}
+\Ensure{$*.offsets$: Offsets array of a CSR graph}
+\Ensure{$H_t$: Collision-free per-thread hashtable}
+
+\Statex
+
+\Function{louvainAggregate}{$G', C'$}
+  \State $\rhd$ Obtain vertices belonging to each community
+  \State $G'_{C'}.offsets \gets countCommunityVertices(G', C')$ \label{alg:louvainag--coff-begin}
+  \State $G'_{C'}.offsets \gets exclusiveScan(G'_{C'}.offsets)$ \label{alg:louvainag--coff-end}
+  \ForAll{$i \in V'$ \textbf{in parallel}} \label{alg:louvainag--comv-begin}
+    \State Add edge $(C'[i], i)$ to CSR $G'_{C'}$ atomically
+  \EndFor \label{alg:louvainag--comv-end}
+  \State $\rhd$ Obtain super-vertex graph
+  \State $G''.offsets \gets communityTotalDegree(G', C')$ \label{alg:louvainag--yoff-begin}
+  \State $G''.offsets \gets exclusiveScan(G''.offsets)$ \label{alg:louvainag--yoff-end}
+  \State $|\Gamma| \gets$ Number of communities in $C'$
+  \ForAll{$c \in [0, |\Gamma|)$ \textbf{in parallel}} \label{alg:louvainag--y-begin}
+    \If{degree of $c$ in $G'_{C'} = 0$} \textbf{continue}
+    \EndIf
+    \State $H_t \gets \{\}$
+    \ForAll{$i \in G'_{C'}.edges(c)$}
+      \State $H_t \gets scanCommunities(H, G', C', i, true)$
+    \EndFor
+    \ForAll{$(d, w) \in H_t$}
+      \State Add edge $(c, d, w)$ to CSR $G''$ atomically
+    \EndFor
+  \EndFor \label{alg:louvainag--y-end}
+  \Return $G''$ \label{alg:louvainag--return}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
