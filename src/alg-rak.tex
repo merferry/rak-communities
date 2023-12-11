@@ -1,40 +1,51 @@
 \begin{algorithm}[hbtp]
-\caption{GVE-LPA: Our parallel Label Propagation Algorithm (LPA).}
+\caption{GVE-LPA: Our parallel LPA.}
 \label{alg:rak}
 \begin{algorithmic}[1]
-\Require{$G'$: Input graph}
+\Require{$G$: Input graph}
 \Require{$C$: Community membership of each vertex}
-\Require{$G'$: Input/super-vertex graph}
-\Require{$C'$: Community membership of each vertex in $G'$}
-\Require{$K'$: Total edge weight of each vertex}
-\Require{$\Sigma'$: Total edge weight of each community}
-\Ensure{$G'_{C'}$: Community vertices (CSR)}
 \Ensure{$H_t$: Collision-free per-thread hashtable}
-\Ensure{$l_i$: Number of iterations performed (per pass)}
-\Ensure{$l_p$: Number of passes performed}
+\Ensure{$l_i$: Number of iterations performed}
 \Ensure{$\tau$: Per iteration tolerance}
-\Ensure{$\tau_{agg}$: Aggregation tolerance}
 
 \Statex
 
-\Function{louvain}{$G$} \label{alg:louvain--begin}
-  \State Vertex membership: $C \gets [0 .. |V|)$ \textbf{;} $G' \gets G$ \label{alg:louvain--initialization}
-  \ForAll{$l_p \in [0 .. \text{\small{MAX\_PASSES}})$} \label{alg:louvain--passes-begin}
-    \State $\Sigma' \gets K' \gets vertexWeights(G')$ \textbf{;} $C' \gets [0 .. |V'|)$ \label{alg:louvain--reset-weights}
-    \State Mark all vertices in $G'$ as unprocessed \label{alg:louvain--reset-affected}
-    \State $l_i \gets louvainMove(G', C', K', \Sigma')$ \label{alg:louvain--local-move}
-    \If{$l_i \le 1$} \textbf{break} \Comment{Globally converged?} \label{alg:louvain--globally-converged}
+\Function{lpa}{$G$} \label{alg:rak--main-begin}
+  \State Vertex membership: $C \gets [0 .. |V|)$ \label{alg:rak--init-begin}
+  \State Mark all vertices in $G$ as unprocessed \label{alg:rak--init-end}
+  \ForAll{$l_i \in [0 .. \text{\small{MAX\_ITERATIONS}})$} \label{alg:rak--iters-begin}
+    \State $\Delta N \gets lpaMove(G, C)$ \label{alg:rak--propagate}
+    \If{$\Delta N/N \le \tau$} \textbf{break} \Comment{Converged?} \label{alg:rak--converged}
     \EndIf
-    \State $|\Gamma|, |\Gamma_{old}| \gets$ Number of communities in $C$, $C'$
-    \If{$|\Gamma|/|\Gamma_{old}| > \tau_{agg}$} \textbf{break} \Comment{Low shrink?} \label{alg:louvain--aggregation-tolerance}
+  \EndFor \label{alg:rak--iters-end}
+  \Return{$C$} \label{alg:rak--main-return}
+\EndFunction \label{alg:rak--main-end}
+
+\Statex
+
+\Function{lpaMove}{$G, C$} \label{alg:rak--move-begin}
+  \State Changed vertices: $\Delta N \gets 0$
+  \ForAll{unprocessed $i \in V$ \textbf{in parallel}}
+    \State Mark $i$ as processed (prune) \label{alg:rak--prune}
+    \State $H_t \gets scanCommunities(\{\}, G, C, i)$ \label{alg:rak--scan}
+    \State $\rhd$ Use $H_t$ to choose the most weighted label
+    \State $c^* \gets$ Most weighted label to $i$ in $G$ \label{alg:rak--best-community}
+    \If{$c^* = C[i]$} \textbf{continue} \label{alg:rak--best-community-same}
     \EndIf
-    \State $C' \gets$ Renumber communities in $C'$ \label{alg:louvain--renumber}
-    \State $C \gets$ Lookup dendrogram using $C$ to $C'$ \label{alg:louvain--lookup}
-    \State $G' \gets louvainAggregate(G', C')$ \label{alg:louvain--aggregate}
-    \State $\tau \gets \tau / \text{\small{TOLERANCE\_DROP}}$ \Comment{Threshold scaling} \label{alg:louvain--threshold-scaling}
-  \EndFor \label{alg:louvain--passes-end}
-  \State $C \gets$ Lookup dendrogram using $C$ to $C'$ \label{alg:louvain--lookup-last}
-  \Return{$C$} \label{alg:louvain--return}
-\EndFunction \label{alg:louvain--end}
+    \State $C[i] \gets c^*$ \textbf{;} $\Delta N \gets \Delta N + 1$ \label{alg:rak--perform-move}
+    \State Mark neighbors of $i$ as unprocessed \label{alg:rak--remark}
+  \EndFor
+\Return{$\Delta N$} \label{alg:rak--move-return}
+\EndFunction \label{alg:rak--move-end}
+
+\Statex
+
+\Function{scanCommunities}{$H_t, G, C, i$} \label{alg:rak--scan-begin}
+  \ForAll{$(j, w) \in G.edges(i)$}
+    \If{$i \neq j$} $H_t \gets H_t[C[j]] + w$
+    \EndIf
+  \EndFor
+  \Return{$H_t$}
+\EndFunction \label{alg:rak--scan-end}
 \end{algorithmic}
 \end{algorithm}
