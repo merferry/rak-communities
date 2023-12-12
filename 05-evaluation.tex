@@ -1,38 +1,31 @@
 \subsection{Experimental Setup}
 \label{sec:setup}
 
-We use a server that has two $16$-core x86-based Intel Xeon Gold 6226R processors running at $2.90$ GHz. Each core has an L1 cache of $1$ MB, an L2 cache of $16$ MB, and a shared L3 cache of $22$ MB. The machine has $93.4$ GB of system memory and runs on CentOS Stream 8. We use GCC 8.5 and OpenMP 4.5. Table \ref{tab:dataset} shows the graphs we use in our experiments. All of them are obtained from the SuiteSparse Matrix Collection \cite{suite19}.
+We employ a server equipped with two Intel Xeon Gold 6226R processors, each featuring $16$ cores running at a clock speed of $2.90$ GHz. Every core is equipped with a $1$ MB L1 cache, a $16$ MB L2 cache, and shares a $22$ MB L3 cache. The system has $93.4$ GB of memory and runs on CentOS Stream 8. We use GCC 8.5 and OpenMP 4.5. Table \ref{tab:dataset} displays the graphs utilized in our experiments, all sourced from the SuiteSparse Matrix Collection \cite{suite19}.
 
 \input{src/tab-dataset}
 \input{src/fig-rak-compare}
+\input{src/fig-louvainrak-compare}
 
 
 
 
 \subsection{Comparing Performance of GVE-LPA}
 
-We now compare the performance of GVE-LPA with igraph LPA, FLPA, and NetworKit LPA. For Vite, we convert the graph datasets to Vite's binary graph format, run it on a single node\ignore{(Vite supports distributed community detection)} with threshold cycling/scaling optimization, and measure the reported average total time. For Grappolo, we measure the run it on the same system, and measure the reported total time. For NetworKit, we use a Python script to invoke \texttt{PLM} (Parallel Louvain Method), and measure the total time reported with \texttt{getTiming()}. For each graph, we measure the runtime of each implementation five times, for averaging. We also record the modularity of communities obtained, as reported by each implementation.
+We now compare the performance of GVE-LPA with FLPA \cite{traag2023large}, igraph LPA \cite{csardi2006igraph}, and NetworKit LPA \cite{staudt2016networkit}. FLPA and igraph LPA are both sequential implementations, while NetworKit LPA is parallel. For FLPA, we checkout the suitable branch with modified \texttt{igraph\_community\_label\_propagation()} function, update the label propagation example in C to load the input graph from a file and measure runtime of \texttt{igraph\_community\_label\_propagation} \texttt{()} with \texttt{gettimeofday()}. For igraph LPA, we follow a similar process as FLPA, but checkout code from the \texttt{master} branch of igraph. For NetworKit, we employ a Python script to invoke \texttt{PLP} (Parallel Label Propagation), and measure the total time reported with \texttt{getTiming()}. For each graph, we measure the NetworKit LPA runtime five times for averaging. Due to time constraints and long running times of FLPA and igraph LPA, we ran them only once per graph. Additionally, we record the modularity of communities obtained from each implementation.
 
-Figure \ref{fig:rak-compare--runtime} shows the runtimes of Vite (Louvain), Grappolo (Louvain), NetworKit Louvain, and GVE-Louvain on each graph in the dataset. Figure \ref{fig:rak-compare--speedup} shows the speedup of GVE-Louvain with respect to each implementation mentioned above. GVE-Louvain is on average $50\times$, $22\times$, and $20\times$ faster than Vite, Grappolo, and NetworKit respectively. On the \textit{sk-2005} graph, GVE-Louvain finds communities in $6.8$ seconds, and thus achieve a processing rate of $560$ million edges/s. Figure \ref{fig:rak-compare--modularity} shows the modularity of communities obtained with each implementation. GVE-Louvain on average obtains $3.1\%$ higher modularity than Vite (especially on web graphs), and $0.6\%$ lower modularity than Grappolo and NetworKit (especially on social networks with poor clustering).
+Figure \ref{fig:rak-compare--runtime} shows the runtimes of FLPA, igraph LPA, NetworKit LPA, and GVE-LPA for each graph in the dataset, while Figure \ref{fig:rak-compare--speedup} shows the speedup of GVE-LPA with respect to each aforementioned implementation. Both FLPA and igraph LPA fail to run on \textit{kmer\_A2a} and \textit{kmer\_V1r} graphs, and hence their results are not shown. GVE-LPA exhibits an average speedup of $97,000\times$, $118,000\times$, and $40\times$ over FLPA, igraph LPA, and NetworKit LPA, respectively, especially on road networks and protein k-mer graphs with low average degrees. On the \textit{sk-2005} graph, GVE-LPA identifies communities in $2.7$ seconds, achieving a processing rate of $1.4$ billion edges/s. Figure \ref{fig:rak-compare--modularity} shows the modularity of communities obtained by each implementation. On average, GVE-LPA obtains $0.6\%$ / $0.2\%$ higher modularity than FLPA and igraph LPA respectively (especially on web graphs), and $4.1\%$ lower modularity than NetworKit LPA (especially on protein k-mer graphs with large number of vertices and a low average degree).
 
 \input{src/fig-rak-hardness}
 \input{src/fig-rak-ss}
 
+Next, we proceed to compare the performance of GVE-LPA with GVE-Louvain in Figure \ref{fig:louvainrak-compare}. Figures \ref{fig:louvainrak-compare--runtime}, \ref{fig:louvainrak-compare--speedup}, and \ref{fig:louvainrak-compare--modularity} present the runtimes, speedup (of GVE-LPA with respect to GVE-Louvain), and modularity of GVE-Louvain and GVE-LPA for each graph in the dataset. GVE-LPA offers a mean speedup of $5.4\times$ compared to GVE-Louvain, particularly on social networks, road networks, and protein k-mer graphs, while achieving on average $10.9\%$ lower modularity, especially on social networks and protein k-mer graphs.
 
-
-
-\subsection{Analyzing Performance of GVE-LPA}
-
-The phase-wise and pass-wise split of GVE-Louvain is shown in Figures \ref{fig:louvain-splits--phase} and \ref{fig:louvain-splits--pass} respectively. Figure \ref{fig:louvain-splits--phase} indicates that GVE-Louvain spends most of the runtime in the local-moving phase on \textit{web graphs}, \textit{road networks}, and \textit{protein k-mer graphs}, while it devotes majority of the runtime in the aggregation phase on \textit{social networks}. The pass-wise split (Figure \ref{fig:louvain-splits--pass}) indicates that the first pass dominates runtime on high-degree graphs (\textit{web graphs} and \textit{social networks}), while subsequent passes prevail in execution time on low-degree graphs (\textit{road networks} and \textit{protein k-mer graphs}).
-
-On average, $49\%$ of GVE-Louvain's runtime is spent in the local-moving phase, $35\%$ is spent in the aggregation phase, and $16\%$ is spent in other steps (initialization, renumbering communities, looking up dendrogram, and resetting communities) of the algorithm. Further, $67\%$ of the runtime is spent in the first pass of the algorithm, which is the most expensive pass due to the size of the original graph (later passes work on super-vertex graphs) \cite{com-wickramaarachchi14}.
-
-We also observe that graphs with lower average degree (\textit{road networks} and \textit{protein k-mer graphs}) and graphs with poor community structure (such as \verb|com-LiveJournal| and \verb|com-Orkut|) have a larger $\text{runtime}/|E|$ factor, as shown in Figure \ref{fig:rak-hardness}.
-
+In Figure \ref{fig:rak-hardness}, we assess the runtime per edge of GVE-LPA. Results indicate that GVE-LPA exhibits a higher $\text{runtime}/|E|$ factor on graphs with a low average degree (road networks and protein k-mer graphs) and on graphs with a poor community structure (\textit{com-LiveJournal} and \textit{com-Orkut}).
 
 
 
 
 \subsection{Strong Scaling of GVE-LPA}
 
-Finally, we measure the strong scaling performance of GVE-Louvain. To this end, we adjust the number of threads from $1$ to $64$ in multiples of $2$ for each input graph, and measure the time taken for finding communities with GVE-Louvain (five times for averaging). The results are shown in Figure \ref{fig:rak-ss}. With 32 threads, GVE-Louvain obtains a $10.4\times$ speedup compared to running with a single thread, i.e., its performance increases by $1.6\times$ for every doubling of threads. Scaling is limited due to the various sequential steps/phases in the algorithm. At 64 threads, GVE-Louvain is impacted by NUMA effects, and offer speedups of only $11.4\times$.
+Finally, we assess the strong scaling performance of GVE-LPA. To this end, we vary the number of threads from $1$ to $64$ in multiples of $2$ for each input graph, and measure the time required for GVE-LPA to identify communities (averaged over five runs). Figure \ref{fig:rak-ss} shows the average strong-scaling of of GVE-LPA, in comparison with GVE-Louvain. With 32 threads, GVE-LPA achieves a speedup of $13.5\times$ compared to single-threaded execution, indicating a performance increase of $1.7\times$ for each doubling of threads. At 64 threads, GVE-LPA is moderately impacted by NUMA effects, and offers a speedup of $18.1\times$. This contrasts with GVE-Louvain, which appears to be significantly affected by NUMA effects.
