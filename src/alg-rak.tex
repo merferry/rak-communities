@@ -42,7 +42,7 @@
 
 \Function{scanCommunities}{$H_t, G, C, i$} \label{alg:rak--scan-begin}
   \ForAll{$(j, w) \in G.edges(i)$}
-    \If{$i \neq j$} $H_t \gets H_t[C[j]] + w$
+    \If{$i \neq j$} $H_t[C[j]] \gets H_t[C[j]] + w$
     \EndIf
   \EndFor
   \Return{$H_t$}
