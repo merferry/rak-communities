@@ -1,10 +1,43 @@
 The \textit{Label Propagation Algorithm (LPA)} is a diffusion-based technique for identifying communities. It is faster and more scalable than Louvain, as it does not require repeated optimization steps and is easier to parallelize \cite{com-newman04, com-raghavan07}. For parallelization of LPA, vertex assignment has been achieved with guided scheduling \cite{staudt2015engineering}, parallel bitonic sort \cite{soman2011fast}, and pre-partitioning of the graph \cite{kuzmin2015parallelizing}.
 
-\ignore{LPA considers only adjacent nodes for label selection. Alternative neighborhood definitions for LPA consider nodes at a distance less than or equal to 2 \cite{lou2013detecting, chen2017detecting} or use a tunable parameter for distance \cite{sun2014label}.}In terms of quality, LPA may generate communities with low modularity, leading to the emergence of a dominant community that engulfs the majority of nodes, obstructing finer community structures \cite{com-gregory10}. To address instability of result, community structure quality, and performance due to vertex processing order, specific ordering strategies have been attempted. These include updating only active nodes \cite{xie2011community} or prioritizing certain subsets based on properties like being core or boundary nodes \cite{gui2018community}. In some cases, oscillations in label assignments may occur instead of convergence. To address this, asynchronous mode \cite{leung2009towards}, alternate updates of independent node subsets \cite{cordasco2012label}, and parallel graph coloring techniques \cite{cordasco2012label} have been attempted. Raghavan et al. \cite{com-raghavan07} report that after only five iterations, labels of $95\%$ of nodes converge to their final values.
-
 Additional improvements upon the LPA include using a stable (non-random) mechanism of label choosing in the case of multiple best labels \cite{com-xing14}, addressing the issue of monster communities \cite{com-berahmand18, com-sattari18}, identifying central nodes and combining communities for improved modularity \cite{com-you20}, and using frontiers with alternating push-pull to reduce the number of edges visited and improve solution quality \cite{com-liu20}. A number of variants of LPA have been proposed, but the original formulation is still the simplest and most efficient \cite{garza2019community}.
 
 A few open source implementations and software packages have been developed for community detection using LPA. Fast Label Propagation Algorithm (FLPA) \cite{traag2023large} is a fast variant of the LPA, which utilizes a queue-based approach to process only vertices with recently updated neighborhoods. NetworKit \cite{staudt2016networkit} is a software package designed for analyzing the structural aspects of graph data sets with billions of connections. It is implemented as a hybrid with C++ kernels and a Python frontend, and includes parallel implementation of LPA. igraph \cite{csardi2006igraph} is a similar package, written in C, with Python, R, and Mathematica frontends. It is widely used in academic research, and includes implementation of LPA.
+
+We now discuss the implementation of LPA in NetworKit, igraph, and FLPA. The parallel implementation of LPA of NetworKit is given in \texttt{NetworKit::PLP::run()} ...
+
+
+%% How NetworKit PLP works
+- In the function NetworKit::PLP::run()
+- Starts with a unique label for each node
+- Done with a plain OpenMP for (1 chunk size, false sharing)
+- They use threshold heuristic, with threshold = $N/10^5$
+- They use a vector-bool for tracking active nodes (vertex pruning opt.)
+- They use the guided-schedule parallel for to loop through active nodes
+- They use a std-map for storing the label weights, created for each vertex (SLOW!!)
+- They use atomic ops. to count the number of updated vertices
+
+
+%% How igraph LPA works
+- In the function igraph\_community\_label\_propagation()
+- Shuffles node order in each iteration
+- Keeps track of dominant labels for each new neighbor of a vertex
+- Selects one of the dominant labels using a random number generator
+- Clears hashtable by going through neigh neighbor
+- Uses same hashtable as ours
+- Does not use pruning optimization
+- Switches between label updating and control iterations
+- Checks if current label of node is not dominant in control iteration
+- No tolerance
+
+
+%% How igraph FLPA works
+- In the function igraph\_i\_community\_label\_propagation()
+- It uses a dequeue for a set of unprocessed vertices, if empty then converged
+- It does not shuffle for random node order
+- If label changed, FLPA considers neighbors not in the same community
+
+
 
 
 
@@ -13,3 +46,121 @@ A few open source implementations and software packages have been developed for 
 
 % https://www.sciencedirect.com/science/article/abs/pii/S0378437119312026
 % http://proceedings.mlr.press/v32/fujiwara14.pdf
+\ignore{
+A number of variants of LPA have been proposed \cite{wang2015hlpa, zhang2016social, ma2018psplpa, joghan2019weighted}.
+
+
+
+
+Label propagation is an effective and efficient technique to utilize local and global features in a network for semi-supervised learning \cite{hwang2010heterogeneous}.
+
+Simply propagating the label on the combined network is not a principled method to explore the cluster structures in the network since each homo-subnetwork may have its own cluster structure and each hetero-subnetwork may also have its own bicluster structures \cite{hwang2010heterogeneous}. Hwang and Kuang \cite{hwang2010heterogeneous} introduce MINProp (Mutual Interaction-based Network Propagation, a regularization framework for propagating information between subnetworks in a heterogeneous network. MINProp sequentially performs label propagation on each individual subnetwork with the current label information derived from the other subnetworks and repeats this step until convergence to the global optimal solution to the convex objective function of the regularization framework. The independent label propagation on each subnetwork explores the cluster structure in the subnetwork. Hwang and Kuang \cite{hwang2010heterogeneous} apply the MINProp algorithm to disease gene discovery from a heterogeneus network of disease phenotypes and genes. MINProp discovered new disease-gene associations that are only reported recently.
+
+Wang et al. \cite{wang2013label} use label propagation to propagate labels from massive 2D semantic labeled datasets, such as ImageNet, to 3D point clouds, due to the difficulty in acquiring sufficient 3D point labels towards training effective classifiers.
+
+Label propagation has been shown to be effective in many automatic segmentation applications \cite{wang2014geodesic}.
+
+Zhang et al. \cite{zhang2017label} propose LPA\_NI, a label propagation algorithm for community detection based on node importance and label influence. Their algorithm first evaluates the importance of each node, and processes the nodes based on descending of their importance. Further, when updating the label of a node, if multiple labels are maximally popular, Zhang et al. calculate the influence of each label, and select the most influential label. Both of these techniques help improve the stability of LPA. However, they rely on priori knowledge to calculate the importance of each node, and the influence of each label.
+
+Zheng et al. \cite{zheng2018improved} introduce a metric, called label purity, which represents the edge-weighted percentage of neighbors which have the same label as the given node. The purity of a node is initialized as being inversely proportional its degree, based on the idea that a vertex with more neighbors is less likely to preserve its own label. To optimize for execution time, Zheng et al. change the processing order of nodes, by processing nodes with higher weighted-degree first. Further, they apply an attenuation factor to attenuate later iterations of label propagation, based on the idea that a label's update time can approximately describe the label's source vertex and the updated vertex, and that signals attenuate with distance. Since, this reduce the probability of label update in later iterations, it allows their algorithm to converge faster.
+
+A similar approach has been propsed by Sattari and Zamanifar \cite{sattari2018spreading}, which attempts to address the issue of monster communities identified LPA, which decrease the quality of communities identified by it. Their method assigns an activation value to each label, and label-activation pairs are propagated by the algorithm.
+
+The most commonly used method to tackle the graph partitioning problem in practice is the multilevel approach. During a coarsening phase, a multilevel graph partitioning algorithm reduces the graph size by iteratively contracting nodes and edges until the graph is small enough to be partitioned by some other algorithm. A partition of the input graph is then constructed by successively transferring the solution to the next finer graph and applying a local search algorithm to improve the current solution \cite{meyerhenke2014partitioning}.
+
+Meyerhenke et al. \cite{meyerhenke2014partitioning} present an approach to partition graphs by by iteratively contracting size-constrained clusterings that are computed using a label propagation algorithm. They also use the same algorithm for uncoarsening as a fast and simple local search algorithm.
+
+Gottesburen et al. \cite{gottesburen2021scalable} present Mt-KaHyPar, the first shared-memory multilevel hypergraph partitioner with a parallel coarsening algorithm that uses parallel community detection as guidance, initial partitioning via parallel recursive bipartitioning with work-stealing, a scalable label propagation refinement algorithm, and the first fully-parallel direct k-way formulation of the classical FM algorithm \cite{fiduccia1988linear}.  If a partition is still imbalanced, on the finest level, Gottesburen et al. rebalance it using an approach that is similar to label propagation.
+
+Parkway \cite{trifunovic2004k}, Mt-KaHIP \cite{akhremtsev2020high}, and ParHiP \cite{meyerhenke2017parallel} use size-constrained label propagation.
+
+Bond percolation is quite similar to the label propagation in community detection \cite{peng2014accelerating}.
+
+Label propagation is very fast \cite{peng2014accelerating}. This is a fast method that simply updates the label of a node according to the plurality vote of its neighbors. It is appropriate for large networks, though the quality is usually compromised. The label propagation is extremely efficient, so it is hard to improve its run time for small graphs\cite{peng2014accelerating}. We also note that label propagation has the lowest score with respect to modularity but the highest score w.r.t. NMI compared to ground truth \cite{peng2014accelerating}.
+
+Since computing the pairwise similarity between the training data is prohibitively expensive in most kinds of input data, currently, there is no general ready-to-use semi-supervised learning method/tool available for learning with tens of millions or more data points \cite{petegrosso2017low}.
+
+Xu et al. \cite{xu2019distributed} propose a distributed temporal link prediction algorithm based on label propagation (DTLPLP). Here, nodes are associated with labels, which include details of their sources, and the corresponding similarity value. When such labels are propagated across neighbouring nodes, they are updated based on the weights of the incident links, and the values from same source nodes are aggregated to evaluate the scores of links in the predicted network.
+
+Soman and Narang \cite{soman2011fast} present the design of a parallel GPU-based algorithm for community detection using weigthed label propagation algorithm.
+
+Zhang et al. \cite{zhang2023large} propose a community detection method based on core node and layer-by-layer label propagation, and extend it to identifying overlapping communities. First, they identify core nodes whose node degree is greater than the average degree in the graph. Label propagation is then carried out layer-by-layer, starting from the core nodes.
+
+Ma et al. \cite{ma2018psplpa} propose a label propagation algorithm on Spark, called PSPLPA (Probability and similarity based Parallel label propagation algorithm).
+
+Precision of link prediction can be improved to a great extent by including community information in the prediction methods \cite{mohan2017scalable}.
+
+Mohan et al. \cite{mohan2017scalable} propose a scalable method for community structure-based link prediction on large networks. This method uses a parallel label propagation algorithm for community detection and a parallel community information-based Adamic–Adar measure for link prediction.
+
+Li et al. \cite{li2015detecting} use a synchronous implementation of LPA.
+
+Zhang et al. \cite{zhang2020lilpa} propose Label Importance based Label Propagation Algorithm (LILPA), is proposed to discover communities by adopting fixed label update order based on the ascending order of node importance. They also apply LILPA in a drug network to discover drug communities and core drugs for treating different indications in Traditional Chinese Medicine (TCM).
+
+A multilevel method is a scalable strategy to solve optimization problems in large bipartite networks, which operates in three stages. Initially the input network is iteratively coarsened into a hierarchy of gradually smaller networks. Coarsening implies in collapsing vertices into so-called super-vertices which inherit properties of their originating vertices. An initial solution is obtained executing the target algorithm in the coarsest network. Finally, this solution is successively projected back over the inverse sequence of coarsened networks, up to the initial one, yielding an approximate final solution \cite{valejo2020coarsening}.
+
+Valejo et al. \cite{valejo2020coarsening} introduce a weight-constrained variation of label propagation for fast coarsening of graphs --- that allows users to specify the desired size of the coarsest network and control super-vertex weights.
+
+Maleki et al. \cite{maleki2020dhlp} present two distributed label propagation algorithms for heterogeneous networks.
+
+Roghani et al. \cite{roghani2021pldls} propose a Spark-based Parallel Label Diffusion and Label Selection (PLDLS) based community detection algorithm. In the first phase of their algorithm, they identify nodes forming triangles as core nodes, assign labels based on the idea that nodes forming triangles tend to be in the same community, and diffuse labels up to two levels. In the second phase, they perform the iterative process of LPA.
+
+Zarei et al. \cite{zarei2020detecting} propose an algorithm called Weighted Label Propagation Algorithm (WLPA) to detect community structure in signed and unsigned social networks. In WLPA, first, the similarity of all adjacent nodes is estimated by using MinHash. Then, each edge is assigned a
+weight equal to the estimated similarity of its end nodes. The weights assigned to the edges somehow indicate the intensity of communication
+between users. Finally, the community structure of the network is determined through the weighted label propagation.
+
+Shen and Yang \cite{shen2016topic} present simLPA, which fuses the content-based and link-structure based approaches for community detection.
+
+El Kouni et al. \cite{el2021wlni} propose an algorithm, called WLNI-LPA, based on label propagation for detecting efficient community structure in the attributed network. WLNI-LPA is an extension of LPA that combines node importance, attributes information, and topology structure to improve the quality of graph partition.
+
+Farnadi et al. \cite{farnadi2015scalable} propose Adaptive Label Propagation, which dynamically adapts to the underlying characteristics of homophily, heterophily, or otherwise, of the connections of the network, and applies suitable label propagation strategies accordingly.
+
+Berahmand and Bouyer \cite{berahmand2018lp} propose Label influence Policy for Label Propagation Algorithm (LP-LPA), which measures link strength value for edges and nodes’ label influence value for nodes in a new label propagation strategy with preference on link strength and for initial nodes selection, avoid of random behavior in tiebreak states, and efficient updating order and rule update. These procedures can sort out the randomness issue in an original LPA and stabilize the discovered communities in all runs of the same network.
+
+Li et al. \cite{li2015parallel} propose Parallel Multi-Label Propagation Algorithm (PMLPA), which employs a new label updating strategy using ankle-value in the label propagation procedure during each iteration, to detect the overlapping communities in networks.
+
+Vitali \cite{henne2015label} apply label propagation to hypergraph clustering. He evaluates three adaptations of label propagation as coarsening strategies in a direct k-way multilevel hypergraph partitioning framework. Vitali also propose a greedy local search algorithm inspired by label propagation for the uncoarsening and refinement phase of the multilevel partitioning heuristic.
+
+Ye et al. \cite{ye2023large} propose GLP, a GPU-based framework to enable efficient LP processing on large-scale graphs.
+
+Boldi et al. \cite{boldi2011layered} propose Layered Label Propagation, which uses clusterings of nodes in various layers to reorder nodes in the graph. These can then be compressed with the WebGraph compression framework \cite{boldi2004webgraph}.
+
+Meyerhenke et al. \cite{meyerhenke2016partitioning} introduce Size-Constrained Label Propagation (SCLaP) and show how it can be used to instantiate both the coarsening phase and the refinement phase of multilevel graph partitioning.
+
+Zhang et al. \cite{zhang2020multilevel} propose a multilevel partition algorithm based on weighted label propagation.
+
+Slota et al. \cite{slota2020scalable} introduce XtraPuLP, a distributed-memory graph partitioner based on LPA. Their implementation can be generalized to compute partitions with an arbitrary number of constraints, and it can compute partitions with balanced communication load across all parts.
+
+Wang et al. \cite{wang2014partition} propose a Multilevel Label Propagation (MLP) method for graph partitioning.
+
+Akhremtsev et al. \cite{akhremtsev2020high} present an approach to multi-level shared-memory parallel graph partitioning. Important ingredients include parallel label propagation for both coarsening and refinement, parallel initial partitioning, a simple yet effective approach to parallel localized local search, and fast locality preserving hash tables.
+
+Slota et al. \cite{slota2014pulp} propose PuLP (Partitioning using Label Propagation) which optimizes for multiple objective metrics simultaneously, while satisfying multiple partitioning constraints
+
+Meyerhenke et al. \cite{meyerhenke2017parallel} propose an LPA based parallel graph partitioner. By introducing size constraints, label propagation becomes applicable for both the coarsening and the refinement phase of multilevel graph partitioning.
+
+Bae et al. \cite{bae2020label} present a graph-partitioning algorithm based on the label propagation algorithm to improve the quality of edge cuts and achieve fast convergence. In their approach, the necessity of applying the label propagation process for all vertices is removed, and the process is applied only for candidate vertices based on a score metric. Their algorithm introduces a stabilization phase in which remote and highly connected vertices are relocated to prevent the algorithm from becoming trapped in local optima.
+
+Das and Petrov \cite{das2011unsupervised} use label propagation for cross-lingual knowledge transfer and use the projected labels in an unsupervised part-of-speech tagger, for languages that have no labeled training data.
+
+Aziz et al. \cite{aziz2023novel} propose a Power system sectionalizing strategy based on modified LPA.
+
+Kozawa et al. \cite{kozawa2017gpu} propose GPU-accelerated graph clustering via parallel label propagation. They also develop algorithms to deal with large-scale datasets that do not fit into GPU memory.
+
+Stergiou et al. \cite{stergiou2018shortcutting} Shortcutting Label Propagation for Distributed Connected Components.
+}
+
+
+
+
+
+
+\ignore{
+Label propagation is one of the algorithms to obtain connected components in a graph \cite{esfahani2021thrifty}.
+
+Esfahani et al. \cite{esfahani2021thrifty}
+}
+
+
+
+
+%% ------------------------------------------------------------------------------
